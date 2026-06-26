@@ -1,3 +1,4 @@
-from app.signals import llm_signal
-print(llm_signal("ok so i finally tried that ramen place downtown and honestly? underwhelming."))
-print(llm_signal("Artificial intelligence represents a transformative paradigm shift. It is important to note the ethical implications."))
+from app.scoring import combine_signals, classify
+print(classify(combine_signals(0.95, 0.90)))  # -> ('likely_ai', ~0.93)
+print(classify(combine_signals(0.10, 0.15)))  # -> ('likely_human', ~0.88)
+print(classify(combine_signals(0.55, 0.60)))  # -> ('uncertain', ~0.89... wait, check)

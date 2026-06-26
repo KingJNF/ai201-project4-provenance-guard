@@ -88,3 +88,35 @@ def get_log(limit=50):
             "detail": r["detail"],
         })
     return entries
+
+def get_classification(content_id):
+    """Fetch the most recent classification entry for a content_id."""
+    conn = _connect()
+    row = conn.execute(
+        """SELECT * FROM audit_log
+           WHERE content_id = ? AND event_type = 'classification'
+           ORDER BY id DESC LIMIT 1""",
+        (content_id,),
+    ).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return {
+        "content_id": row["content_id"],
+        "creator_id": row["creator_id"],
+        "attribution": row["attribution"],
+        "confidence": row["confidence"],
+        "signals": json.loads(row["signals"]) if row["signals"] else None,
+        "status": row["status"],
+    }
+
+
+def update_status(content_id, new_status):
+    """Update the status on all rows for a given content_id."""
+    conn = _connect()
+    conn.execute(
+        "UPDATE audit_log SET status = ? WHERE content_id = ?",
+        (new_status, content_id),
+    )
+    conn.commit()
+    conn.close()
