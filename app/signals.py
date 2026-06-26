@@ -1,8 +1,10 @@
 import os
 import json
 import re
+import statistics
 from groq import Groq
 from dotenv import load_dotenv
+
 
 load_dotenv()
 
@@ -61,4 +63,80 @@ def llm_signal(text: str) -> dict:
         "ai_likelihood": round(score, 4),
         "rationale": data.get("rationale", ""),
         "signal": "llm",
+    }
+
+def _split_sentences(text: str):
+    # Split on sentence-ending punctuation followed by whitespace.
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    return [p for p in parts if p.strip()]
+
+
+def _tokenize_words(text: str):
+    return re.findall(r"\b\w+\b", text.lower())
+
+
+def stylometric_signal(text: str) -> dict:
+    """
+    Signal 2 — structural variability via pure-Python stylometrics.
+    Returns {"ai_likelihood": float 0-1, "metrics": {...}, "signal": "stylometric"}.
+    Higher ai_likelihood => more uniform => more AI-like.
+    """
+    sentences = _split_sentences(text)
+    words = _tokenize_words(text)
+
+    # Guard: very short text is unreliable -> push toward 0.5 (uncertain).
+    if len(words) < 20 or len(sentences) < 2:
+        return {
+            "ai_likelihood": 0.5,
+            "metrics": {"note": "Text too short for reliable stylometry."},
+            "signal": "stylometric",
+        }
+
+    # --- Metric 1: Sentence-length variance (uniformity) ---------------
+    sent_lengths = [len(_tokenize_words(s)) for s in sentences]
+    mean_len = statistics.mean(sent_lengths)
+    stdev_len = statistics.pstdev(sent_lengths)
+    # Coefficient of variation: low CV = uniform = AI-like.
+    cv = (stdev_len / mean_len) if mean_len > 0 else 0
+    # Map CV to uniformity score: CV ~0.0 -> 1.0 (AI), CV >=0.6 -> 0.0 (human).
+    uniformity_score = max(0.0, min(1.0, 1.0 - (cv / 0.6)))
+
+    # --- Metric 2: Type-token ratio (vocabulary diversity) -------------
+    ttr = len(set(words)) / len(words)
+    # AI text often has *moderate-to-high* but smooth TTR; humans vary more.
+    # Here we treat very high diversity as human-leaning. TTR ~0.4 -> AI-ish,
+    # TTR ~0.7+ -> human-ish. Invert and scale.
+    ttr_ai_score = max(0.0, min(1.0, (0.75 - ttr) / 0.35))
+
+    # --- Metric 3: Punctuation density / variety -----------------------
+    punct = re.findall(r"[,;:\-—()\"'!?]", text)
+    punct_density = len(punct) / len(words)
+    punct_variety = len(set(punct))
+    # Sparse, low-variety punctuation -> smoother -> AI-like.
+    # Density ~0.02 & low variety -> AI; richer punctuation -> human.
+    punct_ai_score = max(0.0, min(1.0, 1.0 - (punct_density / 0.12)))
+    if punct_variety >= 4:
+        punct_ai_score *= 0.7  # rich variety pulls toward human
+
+    # --- Combine the three sub-metrics into one signal score -----------
+    # Weighted: sentence uniformity is the strongest stylometric tell.
+    stylo_score = (0.50 * uniformity_score
+                   + 0.30 * ttr_ai_score
+                   + 0.20 * punct_ai_score)
+    stylo_score = round(max(0.0, min(1.0, stylo_score)), 4)
+
+    return {
+        "ai_likelihood": stylo_score,
+        "metrics": {
+            "sentence_count": len(sentences),
+            "mean_sentence_length": round(mean_len, 2),
+            "sentence_length_cv": round(cv, 3),
+            "type_token_ratio": round(ttr, 3),
+            "punctuation_density": round(punct_density, 3),
+            "punctuation_variety": punct_variety,
+            "uniformity_score": round(uniformity_score, 3),
+            "ttr_ai_score": round(ttr_ai_score, 3),
+            "punct_ai_score": round(punct_ai_score, 3),
+        },
+        "signal": "stylometric",
     }

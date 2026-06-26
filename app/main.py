@@ -2,36 +2,29 @@ import uuid
 from flask import Flask, request, jsonify
 
 from app.audit import init_db, write_entry, get_log
-from app.signals import llm_signal
+from app.signals import llm_signal, stylometric_signal
+from app.scoring import combine_signals, classify, confidence_word
 
 app = Flask(__name__)
 init_db()
 
 
-# --- Pipeline dispatcher seam (M4 adds signal 2; stretch adds modalities) ---
+# --- Pipeline dispatcher: runs both signals for text ------------------------
 def run_pipeline(text: str, content_type: str = "text") -> dict:
-    """Selects and runs detection signals based on content_type."""
+    """Selects and runs detection signals based on content_type.
+    The content_type seam lets stretch features (e.g. metadata) snap in
+    later without touching the text path."""
     if content_type == "text":
-        sig1 = llm_signal(text)
-        return {"llm": sig1}
-    # Future content types (e.g. "metadata") snap in here without
-    # touching the text path.
+        return {
+            "llm": llm_signal(text),
+            "stylometric": stylometric_signal(text),
+        }
     raise ValueError(f"Unsupported content_type: {content_type}")
 
 
-# --- Placeholder scoring/label (REPLACED in M4/M5) --------------------------
-def placeholder_attribution(llm_score: float):
-    """Temporary single-signal mapping. Real scoring arrives in M4."""
-    if llm_score >= 0.75:
-        return "likely_ai", llm_score
-    elif llm_score < 0.40:
-        return "likely_human", round(1.0 - llm_score, 4)
-    return "uncertain", 0.5
-
-
-def placeholder_label(attribution: str) -> str:
-    return f"[PLACEHOLDER LABEL] attribution={attribution} — finalized in M4/M5."
-# ----------------------------------------------------------------------------
+# --- Temporary label (real variants arrive in M5) ---------------------------
+def placeholder_label(attribution: str, conf_word: str) -> str:
+    return f"[PLACEHOLDER] {attribution} (confidence: {conf_word}) — final text in M5."
 
 
 @app.route("/submit", methods=["POST"])
@@ -49,34 +42,47 @@ def submit():
 
     content_id = str(uuid.uuid4())
 
-    # Run detection pipeline (Signal 1 only for now)
+    # Run detection pipeline (both signals)
     try:
         results = run_pipeline(text, content_type)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    llm = results["llm"]
-    attribution, confidence = placeholder_attribution(llm["ai_likelihood"])
-    label = placeholder_label(attribution)
+    llm_score = results["llm"]["ai_likelihood"]
+    stylo_score = results["stylometric"]["ai_likelihood"]
 
-    # Structured audit entry
+    # Combine signals -> calibrated confidence -> attribution
+    combined = combine_signals(llm_score, stylo_score)
+    attribution, confidence = classify(combined)
+    conf_word = confidence_word(attribution, confidence)
+    label = placeholder_label(attribution, conf_word)
+
+    # Structured audit entry (both signals + combined score)
     write_entry(
         content_id=content_id,
         creator_id=creator_id,
         event_type="classification",
         attribution=attribution,
-        confidence=round(confidence, 4),
-        signals={"llm_score": llm["ai_likelihood"],
-                 "llm_rationale": llm["rationale"]},
+        confidence=confidence,
+        signals={
+            "llm_score": llm_score,
+            "stylometric_score": stylo_score,
+            "combined_ai_likelihood": combined,
+            "llm_rationale": results["llm"]["rationale"],
+        },
         status="classified",
     )
 
     return jsonify({
         "content_id": content_id,
         "attribution": attribution,
-        "confidence": round(confidence, 4),
+        "confidence": confidence,
         "label": label,
-        "signals": {"llm_score": llm["ai_likelihood"]},
+        "signals": {
+            "llm_score": llm_score,
+            "stylometric_score": stylo_score,
+            "combined_ai_likelihood": combined,
+        },
         "status": "classified",
     }), 200
 
@@ -89,6 +95,18 @@ def log():
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"}), 200
+
+
+@app.route("/", methods=["GET"])
+def index():
+    return jsonify({
+        "service": "Provenance Guard",
+        "endpoints": {
+            "POST /submit": "Submit text for attribution analysis",
+            "GET /log": "View the audit log",
+            "GET /health": "Health check",
+        }
+    }), 200
 
 
 if __name__ == "__main__":
