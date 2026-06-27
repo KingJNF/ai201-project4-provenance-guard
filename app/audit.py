@@ -120,3 +120,38 @@ def update_status(content_id, new_status):
     )
     conn.commit()
     conn.close()
+
+def get_analytics():
+    """Aggregate the audit log into dashboard metrics."""
+    conn = _connect()
+    rows = conn.execute("SELECT * FROM audit_log").fetchall()
+    conn.close()
+
+    classifications = [r for r in rows if r["event_type"] == "classification"]
+    appeals = [r for r in rows if r["event_type"] == "appeal"]
+
+    total = len(classifications)
+    counts = {"likely_ai": 0, "likely_human": 0, "uncertain": 0}
+    confidence_sum = 0.0
+
+    for r in classifications:
+        attr = r["attribution"]
+        if attr in counts:
+            counts[attr] += 1
+        if r["confidence"] is not None:
+            confidence_sum += r["confidence"]
+
+    ai_count = counts["likely_ai"]
+    human_count = counts["likely_human"]
+    ratio = round(ai_count / human_count, 3) if human_count else None
+    appeal_rate = round(len(appeals) / total, 3) if total else 0.0
+    avg_conf = round(confidence_sum / total, 4) if total else 0.0
+
+    return {
+        "total_classifications": total,
+        "verdict_distribution": counts,
+        "ai_to_human_ratio": ratio,
+        "appeal_count": len(appeals),
+        "appeal_rate": appeal_rate,
+        "average_confidence": avg_conf,
+    }

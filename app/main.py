@@ -4,7 +4,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from app.audit import (init_db, write_entry, get_log,
-                       get_classification, update_status)
+                       get_classification, update_status, get_analytics)
 from app.signals import llm_signal, stylometric_signal, repetition_signal
 from app.scoring import combine_signals, classify, confidence_word
 from app.labels import generate_label
@@ -152,3 +152,7 @@ def index():
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
+
+@app.route("/analytics", methods=["GET"])
+def analytics():
+    return jsonify(get_analytics()), 200

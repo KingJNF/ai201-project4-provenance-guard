@@ -221,7 +221,10 @@ repetitive = more AI-like).
 prevents a non-discriminating structural signal from diluting a strong semantic judgment which is a deliberate abstention design.
 
 
-- **Analytics Dashboard:** a read-only view over the audit log — AI-vs-human verdict ratio, appeal rate, and average confidence.
+### Analytics Dashboard (implemented)
+A read-only GET /analytics endpoint aggregating the audit log into platform metrics: (1) verdict distribution (likely_ai / likely_human / uncertain counts and the AI-vs-human ratio), (2) appeal rate (appeals ÷ classifications), and (3) average confidence across all classifications. Gives a moderator a at-a-glance view of detection patterns and contested decisions.
+
+
 - **Provenance Certificate:** a "verified human" credential earned via an extra verification step, displayed as a distinct label variant.
 - **Multi-Modal Support:** add a `content_type:"metadata"` branch in the dispatcher with its own signal (text stylometrics don't apply to metadata).
 ```
