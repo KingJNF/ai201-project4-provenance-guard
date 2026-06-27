@@ -140,3 +140,48 @@ def stylometric_signal(text: str) -> dict:
         },
         "signal": "stylometric",
     }
+def repetition_signal(text: str) -> dict:
+    """
+    Signal 3 — repetition/burstiness heuristic.
+    Measures repeated bigrams and repeated sentence-opening words.
+    Returns {"ai_likelihood": float 0-1, "metrics": {...}, "signal": "repetition"}.
+    Higher => more repetitive => more AI-like.
+    """
+    words = _tokenize_words(text)
+    sentences = _split_sentences(text)
+
+    if len(words) < 20 or len(sentences) < 2:
+        return {
+            "ai_likelihood": 0.5,
+            "metrics": {"note": "Text too short for reliable repetition analysis."},
+            "signal": "repetition",
+        }
+
+    # --- Repeated bigrams ---------------------------------------------
+    bigrams = [(words[i], words[i + 1]) for i in range(len(words) - 1)]
+    unique_bigrams = len(set(bigrams))
+    bigram_repetition = 1.0 - (unique_bigrams / len(bigrams))
+
+    # --- Repeated sentence openers ------------------------------------
+    openers = [_tokenize_words(s)[0] for s in sentences if _tokenize_words(s)]
+    unique_openers = len(set(openers))
+    opener_repetition = 1.0 - (unique_openers / len(openers)) if openers else 0.0
+
+    # --- Combine with a NEUTRAL baseline ------------------------------
+    # Absence of repetition is NOT evidence of human authorship, so low
+    # repetition stays ~0.5 (the signal abstains). Only *detected*
+    # repetition pushes the score upward toward AI.
+    rep_raw = (0.6 * bigram_repetition + 0.4 * opener_repetition)
+    rep_score = 0.5 + min(0.5, rep_raw * 2.0)
+    rep_score = round(max(0.0, min(1.0, rep_score)), 4)
+
+    return {
+        "ai_likelihood": rep_score,
+        "metrics": {
+            "bigram_repetition": round(bigram_repetition, 3),
+            "opener_repetition": round(opener_repetition, 3),
+            "unique_bigrams": unique_bigrams,
+            "unique_openers": unique_openers,
+        },
+        "signal": "repetition",
+    }

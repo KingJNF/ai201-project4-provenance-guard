@@ -1,6 +1,18 @@
-def combine_signals(llm_score: float, stylometric_score: float) -> float:
-    # Reweighted toward the LLM after calibration testing (see README).
-    combined = (0.75 * llm_score) + (0.25 * stylometric_score)
+def combine_signals(llm_score: float, stylometric_score: float,
+                    repetition_score: float = None) -> float:
+    """
+    Combine signals into a single AI-likelihood.
+
+    Two-signal mode (no repetition): 0.75*llm + 0.25*stylometric.
+    Ensemble mode (repetition provided): 0.60*llm + 0.20*stylo + 0.20*repetition.
+    The LLM stays dominant; the two structural signals share remaining weight.
+    """
+    if repetition_score is None:
+        combined = (0.75 * llm_score) + (0.25 * stylometric_score)
+    else:
+        combined = (0.70 * llm_score
+                    + 0.15 * stylometric_score
+                    + 0.15 * repetition_score)
     return round(max(0.0, min(1.0, combined)), 4)
 
 

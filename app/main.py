@@ -5,7 +5,7 @@ from flask_limiter.util import get_remote_address
 
 from app.audit import (init_db, write_entry, get_log,
                        get_classification, update_status)
-from app.signals import llm_signal, stylometric_signal
+from app.signals import llm_signal, stylometric_signal, repetition_signal
 from app.scoring import combine_signals, classify, confidence_word
 from app.labels import generate_label
 
@@ -27,6 +27,7 @@ def run_pipeline(text: str, content_type: str = "text") -> dict:
         return {
             "llm": llm_signal(text),
             "stylometric": stylometric_signal(text),
+            "repetition": repetition_signal(text),
         }
     raise ValueError(f"Unsupported content_type: {content_type}")
 
@@ -53,8 +54,9 @@ def submit():
 
     llm_score = results["llm"]["ai_likelihood"]
     stylo_score = results["stylometric"]["ai_likelihood"]
+    rep_score = results["repetition"]["ai_likelihood"]
 
-    combined = combine_signals(llm_score, stylo_score)
+    combined = combine_signals(llm_score, stylo_score, rep_score)
     attribution, confidence = classify(combined)
     label = generate_label(attribution, confidence)
 
@@ -67,6 +69,7 @@ def submit():
         signals={
             "llm_score": llm_score,
             "stylometric_score": stylo_score,
+            "repetition_score": rep_score,
             "combined_ai_likelihood": combined,
             "llm_rationale": results["llm"]["rationale"],
         },
@@ -81,6 +84,7 @@ def submit():
         "signals": {
             "llm_score": llm_score,
             "stylometric_score": stylo_score,
+            "repetition_score": rep_score,
             "combined_ai_likelihood": combined,
         },
         "status": "classified",

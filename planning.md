@@ -212,7 +212,15 @@ APPEAL FLOW
 
 ## Stretch Feature Plan (update before starting each)
 
-- **Ensemble Detection:** add a 3rd signal (e.g., burstiness/repetition heuristic) and document the weighting/voting rule for resolving conflicts; expose all individual scores beside the ensemble result.
+### Ensemble Detection (implemented)
+Third signal: **Repetition/burstiness heuristic** measures repeated bigrams and repeated sentence-opening words. AI text tends to reuse phrasing and openers; human writing varies more. Output: 0–1 ai_likelihood (higher = more
+repetitive = more AI-like).
+
+**Weighting/voting strategy:** Weighted average — LLM 0.70, stylometric 0.15, repetition 0.15. The LLM dominates as the proven-reliable semantic judge.
+**Conflict resolution:** The repetition signal uses a *neutral baseline* (0.5): absence of repetition is treated as "no evidence," not as a vote for human, so it only influences the verdict when repetition is actually detected. This
+prevents a non-discriminating structural signal from diluting a strong semantic judgment which is a deliberate abstention design.
+
+
 - **Analytics Dashboard:** a read-only view over the audit log — AI-vs-human verdict ratio, appeal rate, and average confidence.
 - **Provenance Certificate:** a "verified human" credential earned via an extra verification step, displayed as a distinct label variant.
 - **Multi-Modal Support:** add a `content_type:"metadata"` branch in the dispatcher with its own signal (text stylometrics don't apply to metadata).
