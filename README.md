@@ -56,7 +56,7 @@ analytics endpoint summarizes platform-wide detection patterns.
 > Tested on Windows 11 with PowerShell. Commands are PowerShell-flavored; on macOS/Linux or Git Bash, swap the venv activation line accordingly.
 
 **1. Clone the repository:**
-```bash
+bash
 git clone <your-repo-url>
 cd ai201-project4-provenance-guard
 
@@ -71,13 +71,15 @@ pip install -r requirements.txt
 **4. Create a .env file in the project root with your Groq API key:**
 GROQ_API_KEY=your_key_here
 
-**5. Running the App From the project root, with your virtual environment active:**
+## Running the App
+
+From the project root, with your virtual environment active:**
 flask --app app/main run --port 5000
 
 The server starts at http://127.0.0.1:5000. A health check confirms it's up:
 Invoke-RestMethod -Uri "http://localhost:5000/health" -Method Get # -> { "status": "ok" }
 
-API Endpoints
+## API Endpoints
 
 | Method | Route       | Purpose                                          |
 |--------|-------------|--------------------------------------------------|
@@ -119,11 +121,11 @@ Response:
   "status": "classified"
 }
 
-Detection Signals
+## Detection Signals
 
 Provenance Guard uses three independent signals that measure different properties of the text. Their blind spots differ, so combining them is more informative than any single signal.
 
-Signal 1:LLM Classifier (semantic)
+Signal 1: LLM Classifier (semantic)
 Measures: Holistic semantic and stylistic coherence via Groq (llama-3.3-70b-versatile) such as naturalness of voice, specificity of detail, originality of phrasing, and presence of generic "AI-sounding" transitions. Returns a 0–1 AI-likelihood plus a one-sentence rationale.
 Blind spot: Can be fooled by lightly-edited AI output and by formal, polished human writing (academic/technical), which shares surface features with AI text.
 
@@ -136,7 +138,8 @@ Measures: Repeated bigrams and repeated sentence-opening words. AI text tends to
 Design note: Uses a neutral baseline (0.5). As a result, the absence of repetition is not treated as evidence of human authorship, so the signal abstains unless it actually detects repetition.
 
 
-Confidence Scoring & How It Was Validated
+## Confidence Scoring & How It Was Validated
+
 The three signals combine into a single AI-likelihood via a weighted average:
 
 combined = (0.70 × llm) + (0.15 × stylometric) + (0.15 × repetition)
@@ -156,7 +159,7 @@ Why asymmetric? A false positive (labeling a human's work as AI), is more harmfu
 Validation
 I tested four inputs spanning the confidence range: clear AI, clear human, a formal human essay, and lightly-edited AI. Clear AI and clear human came out correctly with a wide confidence gap. The borderline cases (formal human, edited AI) correctly landed in uncertain / low-confidence bands rather than a confident verdict which is exactly the cautious behavior the design targets.
 
-Example Submissions:
+## Example Submissions
 
 High-confidence example: clear human writing:
 Input: A casual, conversational restaurant review with varied sentence lengths and informal punctuation.
@@ -170,7 +173,8 @@ Result: uncertain, confidence: low (combined 0.708)
 Signals: llm 0.8, stylometric 0.4868, repetition 0.50, combined 0.708
 The formal register pushes the score toward AI (combined 0.708), but it stays just under the 0.75 accusation threshold. So the system says "Origin unclear" instead of falsely accusing a human writer. This is the asymmetric-threshold design working as intended.
 
-Transparency Labels
+## Transparency Labels
+
 Three plain-language variants, shown to readers. The confidence percentage is embedded so the text visibly differs between high- and low-confidence results.
 
 🤖 Likely AI-generated: "...probably created with the help of an AI tool (confidence: moderate, 76%). This is an automated estimate, not a certainty — the creator can request a review if they disagree."
@@ -182,14 +186,15 @@ Three plain-language variants, shown to readers. The confidence percentage is em
 The uncertain label is deliberately non-accusatory. It never tells a reader the text is AI.
 
 
-Appeals Workflow
+## Appeals Workflow
+
 A creator who disagrees with a classification can contest it. POST /appeal with the content_id and free-text reasoning:
 
 Invoke-RestMethod -Uri "http://localhost:5000/appeal" -Method Post -ContentType "application/json" -Body '{"content_id": "<id>", "creator_reasoning": "I wrote this myself; I am a non-native English speaker and my style is formal."}'
 
 On receipt, the system: (1) looks up the original classification, (2) flips its status to under_review, (3) logs the appeal — with the creator's reasoning and the original signal scores — directly beside the original decision in the audit log, and (4) returns a confirmation. No automatic re-classification occurs; a human moderator reviews the queue.
 
-Rate Limiting:
+## Rate Limiting
 
 POST /submit is limited to 10 requests per minute and 100 per day per client (via Flask-Limiter). Over the limit, the endpoint returns 429 Too Many Requests.
 
@@ -197,14 +202,14 @@ Reasoning: A genuine creator submits one piece at a time and reviews the result 
 
 Verified: A 12-request burst returned 200 for the first 10 and 429 for the final 2.
 
-Audit Log:
+## Audit Log
 
 Every classification and appeal is recorded in SQLite with a full structured entry: content_id, creator_id, ISO timestamp, event_type, attribution, confidence, all individual signal scores, the LLM rationale, status, and (for appeals) the creator's reasoning. View it via GET /log:
 
 Invoke-RestMethod -Uri "http://localhost:5000/log" -Method Get | ConvertTo-Json -Depth 5
 
 
-Stretch Features Implemented:
+## Stretch Features Implemented
 
 1. Ensemble Detection:
 
@@ -219,7 +224,7 @@ Invoke-RestMethod -Uri "http://localhost:5000/analytics" -Method Get | ConvertTo
 Returns: total classifications, verdict distribution (likely_ai / likely_human / uncertain), AI-to-human ratio, appeal count and appeal rate, and average confidence. In testing across 29 classifications, ~69% landed in uncertain which is the measurable footprint of the system's false-positive-avoidance design.
 
 
-Known Limitations:
+## Known Limitations
 
 * The stylometric signal misreads polished, vocabulary-rich AI text as human. During calibration, a clearly-AI sample initially scored only 0.31 on this signal because it used varied vocabulary and punctuation, briefly pulling the combined verdict into uncertain.
 
@@ -231,7 +236,7 @@ Known Limitations:
 
 * No authentication. creator_id is self-reported; in production this would require real authentication.
 
-Divergence from the Plan:
+## Divergence from the Plan
 
 The planning.md written before implementation specified a two-signal pipeline weighted 0.65 LLM / 0.35 stylometric. During calibration, I found this under-served strong LLM signals: a clearly-AI sample landed in uncertain because the stylometric signal dragged the combined score below the 0.75 threshold. I diverged in two ways:
 
@@ -242,11 +247,11 @@ The planning.md written before implementation specified a two-signal pipeline we
 planning.md was intentionally left unchanged for the original weights to preserve the integrity of "planning before code". This section documents the empirically-driven evolution.
 
 
-AI Tools Used in Development
+## AI Tools Used in Development
+
 I used an AI assistant (Claude, via You.com) throughout development, following the staged AI Tool Plan in planning.md.
 
 * What I used it for: Generating the Flask app skeleton, the SQLite audit-log helpers, the three signal functions, the scoring/threshold logic, and the three label variants. Each time providing the relevant planning.md spec sections as context.
 
 * How I verified its output: I tested each signal independently before wiring it in, ran four calibration inputs through the full pipeline to confirm the thresholds behaved as specified, and checked every endpoint with live requests (/submit, /appeal, /log, /analytics, plus the rate-limit burst test).
-
 * Where I corrected or overrode it: I caught and fixed an AI-introduced bug where a partial edit referenced an undefined variable (rep_raw), and I diagnosed and corrected a flawed repetition-signal design that treated "no repetition" as evidence of human authorship. I replaced it with the neutral-baseline approach. The reweighting decision (0.75→0.70 LLM weighting) was driven by my own calibration findings, not the AI's initial suggestion.
