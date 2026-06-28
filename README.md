@@ -6,7 +6,7 @@ classification they believe is wrong. Built around the principle that on a writi
 ## 🎥 Walkthrough Video
 
 A short video walkthrough of the system is available here:
-**[Watch the walkthrough](YOUR_VIDEO_LINK_HERE)**
+**[Watch the walkthrough](https://drive.google.com/file/d/1J1AEELA0WA7ZYVCDy6IKpya_jEj12veZ/view?usp=sharing)**
 
 
 ---
